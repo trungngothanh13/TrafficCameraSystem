@@ -1,1 +1,2 @@
-# TrafficCameraSystem
+python -m venv traffic_camera_env
+traffic_camera_env\Scripts\activate
