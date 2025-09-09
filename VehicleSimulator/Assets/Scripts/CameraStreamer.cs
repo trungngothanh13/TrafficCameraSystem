@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -12,8 +11,7 @@ public class CameraStreamer : MonoBehaviour
     public int jpegQuality = 75;
     public float frameRate = 60f;
     
-    // Private variables
-    private Camera targetCamera;
+    private Camera camera;
     private RenderTexture renderTexture;
     private Texture2D texture2D;
     private TcpListener server;
@@ -24,31 +22,27 @@ public class CameraStreamer : MonoBehaviour
     
     void Start()
     {
-        Debug.Log("Starting Camera Streamer...");
-        
-        // Get camera component
-        targetCamera = GetComponent<Camera>();
-        if (targetCamera == null)
+        camera = GetComponent<Camera>();
+        if (camera == null)
         {
-            Debug.LogError("No Camera component found! Please attach this script to a Camera.");
+            Debug.LogError("No Camera component found!");
             return;
         }
         
-        // Setup render texture
-        renderTexture = new RenderTexture(640, 480, 24);
-        texture2D = new Texture2D(640, 480, TextureFormat.RGB24, false);
-        targetCamera.targetTexture = renderTexture;
+        // Create render texture for streaming
+        renderTexture = new RenderTexture(720, 480, 24);
+        texture2D = new Texture2D(720, 480, TextureFormat.RGB24, false);
+        
+        // Don't set targetTexture here - we'll use OnPostRender instead
         
         // Start TCP server
-        StartTCPServer();
+        StartServer();
         
-        // Start streaming coroutine
+        // Start streaming
         StartCoroutine(StreamFrames());
-        
-        Debug.Log($"Camera Streamer initialized on port {port}");
     }
     
-    void StartTCPServer()
+    void StartServer()
     {
         try
         {
@@ -60,11 +54,10 @@ public class CameraStreamer : MonoBehaviour
             serverThread.Start();
             
             Debug.Log($"TCP Server started on port {port}");
-            Debug.Log("Waiting for Python client to connect...");
         }
         catch (Exception e)
         {
-            Debug.LogError($"Failed to start TCP server: {e.Message}");
+            Debug.LogError($"Failed to start server: {e.Message}");
         }
     }
     
@@ -72,31 +65,44 @@ public class CameraStreamer : MonoBehaviour
     {
         try
         {
-            while (true)
+            while (server != null && server.Server.IsBound)
             {
-                client = server.AcceptTcpClient();
-                stream = client.GetStream();
-                isStreaming = true;
-                
-                Debug.Log("✅ Python client connected!");
-                
-                // Handle client disconnection
-                while (client.Connected && isStreaming)
+                try
                 {
-                    Thread.Sleep(100);
+                    client = server.AcceptTcpClient();
+                    stream = client.GetStream();
+                    isStreaming = true;
+                    
+                    Debug.Log("Client connected!");
+                    
+                    // Wait for client to disconnect
+                    while (client != null && client.Connected && isStreaming)
+                    {
+                        Thread.Sleep(100);
+                    }
+                    
+                    Debug.Log("Client disconnected");
+                    isStreaming = false;
                 }
-                
-                Debug.Log("Client disconnected");
-                isStreaming = false;
+                catch (System.Net.Sockets.SocketException)
+                {
+                    // Server was stopped
+                    break;
+                }
             }
+        }
+        catch (System.Threading.ThreadAbortException)
+        {
+            // Thread was aborted, this is normal
+            Debug.Log("Server thread stopped");
         }
         catch (Exception e)
         {
-            Debug.LogError($"TCP server error: {e.Message}");
+            Debug.LogError($"Server error: {e.Message}");
         }
     }
     
-    IEnumerator StreamFrames()
+    System.Collections.IEnumerator StreamFrames()
     {
         float frameInterval = 1f / frameRate;
         
@@ -104,22 +110,41 @@ public class CameraStreamer : MonoBehaviour
         {
             if (isStreaming && stream != null && stream.CanWrite)
             {
-                CaptureAndSendFrame();
+                SendFrame();
             }
             
             yield return new WaitForSeconds(frameInterval);
         }
     }
     
-    void CaptureAndSendFrame()
+    void OnPostRender()
+    {
+        // This method is no longer needed - we use coroutine instead
+    }
+    
+    void SendFrame()
     {
         try
         {
-            // Capture frame from camera
+            // Check if client is still connected
+            if (client == null || !client.Connected || stream == null || !stream.CanWrite)
+            {
+                isStreaming = false;
+                return;
+            }
+            
+            // Capture current camera view to texture
+            camera.targetTexture = renderTexture;
+            camera.Render();
+            
+            // Read pixels from render texture
             RenderTexture.active = renderTexture;
-            texture2D.ReadPixels(new Rect(0, 0, 640, 480), 0, 0);
+            texture2D.ReadPixels(new Rect(0, 0, 720, 480), 0, 0);
             texture2D.Apply();
             RenderTexture.active = null;
+            
+            // Reset camera to render to screen
+            camera.targetTexture = null;
             
             // Convert to JPEG
             byte[] imageData = texture2D.EncodeToJPG(jpegQuality);
@@ -128,25 +153,37 @@ public class CameraStreamer : MonoBehaviour
             byte[] lengthBytes = BitConverter.GetBytes(imageData.Length);
             if (BitConverter.IsLittleEndian)
             {
-                Array.Reverse(lengthBytes); // Convert to big-endian
+                Array.Reverse(lengthBytes);
             }
             
             // Send data
             stream.Write(lengthBytes, 0, 4);
             stream.Write(imageData, 0, imageData.Length);
             stream.Flush();
+            
+            Debug.Log($"Sent frame: {imageData.Length} bytes");
+        }
+        catch (System.Net.Sockets.SocketException)
+        {
+            // Client disconnected normally
+            Debug.Log("Client disconnected");
+            isStreaming = false;
+        }
+        catch (System.IO.IOException)
+        {
+            // Connection lost
+            Debug.Log("Connection lost");
+            isStreaming = false;
         }
         catch (Exception e)
         {
-            Debug.LogError($"Frame capture/send error: {e.Message}");
+            Debug.LogError($"Frame send error: {e.Message}");
             isStreaming = false;
         }
     }
     
     void OnDestroy()
     {
-        Debug.Log("Stopping Camera Streamer...");
-        
         isStreaming = false;
         
         if (stream != null)
@@ -171,6 +208,7 @@ public class CameraStreamer : MonoBehaviour
         
         if (renderTexture != null)
         {
+            camera.targetTexture = null;
             renderTexture.Release();
             DestroyImmediate(renderTexture);
         }
@@ -179,16 +217,5 @@ public class CameraStreamer : MonoBehaviour
         {
             DestroyImmediate(texture2D);
         }
-    }
-    
-    // Simple GUI for debugging
-    void OnGUI()
-    {
-        GUILayout.BeginArea(new Rect(10, 10, 250, 100));
-        GUILayout.Label($"Camera Streamer");
-        GUILayout.Label($"Port: {port}");
-        GUILayout.Label($"Status: {(isStreaming ? "Streaming" : "Waiting for client")}");
-        GUILayout.Label($"Client: {(client != null && client.Connected ? "Connected" : "Disconnected")}");
-        GUILayout.EndArea();
     }
 }
