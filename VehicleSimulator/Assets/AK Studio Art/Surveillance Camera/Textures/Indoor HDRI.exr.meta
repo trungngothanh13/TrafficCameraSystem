@@ -121,3 +121,10 @@ TextureImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264577
+  packageName: Surveillance Camera
+  packageVersion: 1.0
+  assetPath: Assets/AK Studio Art/Surveillance Camera/Textures/Indoor HDRI.exr
+  uploadId: 664797

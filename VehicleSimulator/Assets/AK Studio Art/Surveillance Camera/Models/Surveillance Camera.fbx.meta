@@ -105,3 +105,10 @@ ModelImporter:
   userData: 
   assetBundleName: 
   assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 264577
+  packageName: Surveillance Camera
+  packageVersion: 1.0
+  assetPath: Assets/AK Studio Art/Surveillance Camera/Models/Surveillance Camera.fbx
+  uploadId: 664797
