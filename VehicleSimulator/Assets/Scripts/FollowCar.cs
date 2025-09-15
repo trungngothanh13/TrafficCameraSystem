@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -14,7 +14,7 @@ public class CameraFollow : MonoBehaviour
         HandleTranslation();
         HandleRotation();
     }
-   
+
     private void HandleTranslation()
     {
         var targetPosition = target.TransformPoint(offset);
