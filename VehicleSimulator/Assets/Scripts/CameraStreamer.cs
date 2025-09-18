@@ -1,221 +1,174 @@
-using System;
-using System.Net;
-using System.Net.Sockets;
-using System.Threading;
 using UnityEngine;
+using System;
 
 public class CameraStreamer : MonoBehaviour
 {
-    [Header("Stream Settings")]
-    public int port = 5001;
-    public int jpegQuality = 75;
-    public float frameRate = 60f;
+    [Header("Camera Settings")]
+    public Camera targetCamera;
+    public int cameraId = 0;
+    public int width = 1920;
+    public int height = 1080;
+    [Range(1, 100)] public int quality = 80;
+    [Range(1f, 60f)] public float frameRate = 30f;
     
-    private Camera camera;
+    [Header("WebSocket Settings")]
+    public string serverUrl = "ws://127.0.0.1:8081";
+    public bool autoConnect = true;
+    public bool useExistingTargetTexture = true;
+    
     private RenderTexture renderTexture;
     private Texture2D texture2D;
-    private TcpListener server;
-    private TcpClient client;
-    private NetworkStream stream;
-    private bool isStreaming = false;
-    private Thread serverThread;
+    private WebSocketClient wsClient;
+    private float lastFrameTime;
+    private float frameInterval;
+    private bool createdOwnRenderTexture = false;
+    private RenderTexture originalTargetTexture;
     
     void Start()
     {
-        camera = GetComponent<Camera>();
-        if (camera == null)
+        // Giữ lại targetTexture gốc (nếu có)
+        originalTargetTexture = targetCamera != null ? targetCamera.targetTexture : null;
+
+        // Sử dụng RenderTexture sẵn có nếu có và cờ được bật
+        if (useExistingTargetTexture && targetCamera != null && targetCamera.targetTexture != null)
         {
-            Debug.LogError("No Camera component found!");
+            renderTexture = targetCamera.targetTexture;
+            width = renderTexture.width;
+            height = renderTexture.height;
+            createdOwnRenderTexture = false;
+        }
+        else
+        {
+            // Khởi tạo render texture riêng
+            renderTexture = new RenderTexture(width, height, 24);
+            if (targetCamera != null)
+            {
+                targetCamera.targetTexture = renderTexture;
+            }
+            createdOwnRenderTexture = true;
+        }
+        
+        // Khởi tạo texture2D để đọc pixel data
+        texture2D = new Texture2D(width, height, TextureFormat.RGB24, false);
+        
+        // Tính toán frame interval
+        frameInterval = Mathf.Max(0.001f, 1f / Mathf.Max(1f, frameRate));
+        
+        // Khởi tạo WebSocket client
+        if (autoConnect)
+        {
+            ConnectToServer();
+        }
+    }
+    
+    void Update()
+    {
+        // Kiểm tra nếu đã đến thời gian capture frame tiếp theo
+        if (Time.time - lastFrameTime >= frameInterval)
+        {
+            CaptureAndSendFrame();
+            lastFrameTime = Time.time;
+        }
+    }
+    
+    void CaptureAndSendFrame()
+    {
+        if (wsClient == null || !wsClient.IsConnected())
             return;
-        }
+            
+        // Đọc pixel data từ render texture
+        if (renderTexture == null)
+            return;
+
+        RenderTexture prev = RenderTexture.active;
+        RenderTexture.active = renderTexture;
+        texture2D.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+        texture2D.Apply(false);
+        RenderTexture.active = prev;
         
-        // Create render texture for streaming
-        renderTexture = new RenderTexture(720, 480, 24);
-        texture2D = new Texture2D(720, 480, TextureFormat.RGB24, false);
+        // Encode thành JPEG
+        byte[] jpegData = texture2D.EncodeToJPG(Mathf.Clamp(quality, 1, 100));
         
-        // Don't set targetTexture here - we'll use OnPostRender instead
+        // Tạo message với camera ID và frame data
+        string message = CreateStreamMessage(cameraId, jpegData);
         
-        // Start TCP server
-        StartServer();
-        
-        // Start streaming
-        StartCoroutine(StreamFrames());
+        // Gửi qua WebSocket
+        wsClient.SendMessage(message);
     }
     
-    void StartServer()
+    string CreateStreamMessage(int camId, byte[] frameData)
     {
-        try
-        {
-            server = new TcpListener(IPAddress.Any, port);
-            server.Start();
-            
-            serverThread = new Thread(AcceptClients);
-            serverThread.IsBackground = true;
-            serverThread.Start();
-            
-            Debug.Log($"TCP Server started on port {port}");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Failed to start server: {e.Message}");
-        }
+        // Format: "CAMERA_STREAM:{cameraId}:{base64Data}"
+        string base64Data = Convert.ToBase64String(frameData);
+        return $"CAMERA_STREAM:{camId}:{base64Data}";
     }
     
-    void AcceptClients()
+    public void ConnectToServer()
     {
-        try
+        if (wsClient != null)
         {
-            while (server != null && server.Server.IsBound)
-            {
-                try
-                {
-                    client = server.AcceptTcpClient();
-                    stream = client.GetStream();
-                    isStreaming = true;
-                    
-                    Debug.Log("Client connected!");
-                    
-                    // Wait for client to disconnect
-                    while (client != null && client.Connected && isStreaming)
-                    {
-                        Thread.Sleep(100);
-                    }
-                    
-                    Debug.Log("Client disconnected");
-                    isStreaming = false;
-                }
-                catch (System.Net.Sockets.SocketException)
-                {
-                    // Server was stopped
-                    break;
-                }
-            }
+            wsClient.Disconnect();
         }
-        catch (System.Threading.ThreadAbortException)
+        
+        wsClient = new WebSocketClient(serverUrl);
+        wsClient.OnConnected += OnWebSocketConnected;
+        wsClient.OnDisconnected += OnWebSocketDisconnected;
+        wsClient.OnError += OnWebSocketError;
+        wsClient.Connect();
+    }
+    
+    public void DisconnectFromServer()
+    {
+        if (wsClient != null)
         {
-            // Thread was aborted, this is normal
-            Debug.Log("Server thread stopped");
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Server error: {e.Message}");
+            wsClient.Disconnect();
         }
     }
     
-    System.Collections.IEnumerator StreamFrames()
+    void OnWebSocketConnected()
     {
-        float frameInterval = 1f / frameRate;
-        
-        while (true)
-        {
-            if (isStreaming && stream != null && stream.CanWrite)
-            {
-                SendFrame();
-            }
-            
-            yield return new WaitForSeconds(frameInterval);
-        }
+        Debug.Log($"Camera {cameraId} connected to Python WebSocket server");
     }
     
-    void OnPostRender()
+    void OnWebSocketDisconnected()
     {
-        // This method is no longer needed - we use coroutine instead
+        Debug.Log($"Camera {cameraId} disconnected from Python WebSocket server");
     }
     
-    void SendFrame()
+    void OnWebSocketError(string error)
     {
-        try
-        {
-            // Check if client is still connected
-            if (client == null || !client.Connected || stream == null || !stream.CanWrite)
-            {
-                isStreaming = false;
-                return;
-            }
-            
-            // Capture current camera view to texture
-            camera.targetTexture = renderTexture;
-            camera.Render();
-            
-            // Read pixels from render texture
-            RenderTexture.active = renderTexture;
-            texture2D.ReadPixels(new Rect(0, 0, 720, 480), 0, 0);
-            texture2D.Apply();
-            RenderTexture.active = null;
-            
-            // Reset camera to render to screen
-            camera.targetTexture = null;
-            
-            // Convert to JPEG
-            byte[] imageData = texture2D.EncodeToJPG(jpegQuality);
-            
-            // Send frame length (4 bytes, big-endian)
-            byte[] lengthBytes = BitConverter.GetBytes(imageData.Length);
-            if (BitConverter.IsLittleEndian)
-            {
-                Array.Reverse(lengthBytes);
-            }
-            
-            // Send data
-            stream.Write(lengthBytes, 0, 4);
-            stream.Write(imageData, 0, imageData.Length);
-            stream.Flush();
-            
-            Debug.Log($"Sent frame: {imageData.Length} bytes");
-        }
-        catch (System.Net.Sockets.SocketException)
-        {
-            // Client disconnected normally
-            Debug.Log("Client disconnected");
-            isStreaming = false;
-        }
-        catch (System.IO.IOException)
-        {
-            // Connection lost
-            Debug.Log("Connection lost");
-            isStreaming = false;
-        }
-        catch (Exception e)
-        {
-            Debug.LogError($"Frame send error: {e.Message}");
-            isStreaming = false;
-        }
+        Debug.LogError($"Camera {cameraId} WebSocket error: {error}");
     }
     
     void OnDestroy()
     {
-        isStreaming = false;
-        
-        if (stream != null)
+        DisconnectFromServer();
+
+        // Chỉ thu hồi RenderTexture nếu do script tạo ra
+        if (createdOwnRenderTexture && renderTexture != null)
         {
-            stream.Close();
-        }
-        
-        if (client != null)
-        {
-            client.Close();
-        }
-        
-        if (server != null)
-        {
-            server.Stop();
-        }
-        
-        if (serverThread != null)
-        {
-            serverThread.Abort();
-        }
-        
-        if (renderTexture != null)
-        {
-            camera.targetTexture = null;
+            if (targetCamera != null && targetCamera.targetTexture == renderTexture)
+            {
+                // Khôi phục targetTexture gốc trước khi hủy
+                targetCamera.targetTexture = originalTargetTexture;
+            }
             renderTexture.Release();
             DestroyImmediate(renderTexture);
         }
-        
+
         if (texture2D != null)
         {
             DestroyImmediate(texture2D);
         }
+    }
+    
+    void OnApplicationQuit()
+    {
+        DisconnectFromServer();
+    }
+
+    internal bool IsConnected()
+    {
+        return wsClient != null && wsClient.IsConnected();
     }
 }
