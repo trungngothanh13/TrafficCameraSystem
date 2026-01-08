@@ -11,10 +11,14 @@ public class CameraManager : MonoBehaviour
     public bool startStreamingOnStart = true;
     
     [Header("Stream Settings")]
-    public int width = 1920;
-    public int height = 1080;
+    // Đồng bộ với mặc định trong CameraStreamer (nhẹ hơn cho nhiều camera)
+    public int width = 1280;
+    public int height = 720;
     public int quality = 80;
-    public float frameRate = 30f;
+    public float frameRate = 15f;
+
+    [Header("Debug")]
+    public bool enableDebugLogs = false;
     
     void Start()
     {
@@ -32,6 +36,13 @@ public class CameraManager : MonoBehaviour
         {
             if (cameras[i] != null)
             {
+                // Tắt AudioListener trên các camera stream để tránh warning nhiều listener
+                var listener = cameras[i].GetComponent<AudioListener>();
+                if (listener != null)
+                {
+                    listener.enabled = false;
+                }
+
                 // Tạo CameraStreamer component
                 CameraStreamer streamer = cameras[i].gameObject.GetComponent<CameraStreamer>();
                 if (streamer == null)
@@ -50,8 +61,11 @@ public class CameraManager : MonoBehaviour
                 streamer.autoConnect = false; // Sẽ connect thủ công
                 
                 cameraStreamers[i] = streamer;
-                
-                Debug.Log($"Setup camera {i}: {cameras[i].name}");
+
+                if (enableDebugLogs)
+                {
+                    Debug.Log($"Setup camera {i}: {cameras[i].name}");
+                }
             }
         }
     }
@@ -65,8 +79,11 @@ public class CameraManager : MonoBehaviour
                 cameraStreamers[i].ConnectToServer();
             }
         }
-        
-        Debug.Log("Started all camera streams to Python server");
+
+        if (enableDebugLogs)
+        {
+            Debug.Log("Started all camera streams to Python server");
+        }
     }
     
     public void StopAllStreams()
@@ -78,8 +95,11 @@ public class CameraManager : MonoBehaviour
                 cameraStreamers[i].DisconnectFromServer();
             }
         }
-        
-        Debug.Log("Stopped all camera streams");
+
+        if (enableDebugLogs)
+        {
+            Debug.Log("Stopped all camera streams");
+        }
     }
     
     public void StartStream(int cameraIndex)

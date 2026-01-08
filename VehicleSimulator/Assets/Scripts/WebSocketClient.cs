@@ -97,6 +97,33 @@ public class WebSocketClient
             byte[] buffer = Encoding.UTF8.GetBytes(message);
             await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, cancellationTokenSource.Token);
         }
+        catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+        {
+            // Bỏ qua các exception do huỷ task/kết nối, tránh log lỗi không cần thiết
+        }
+        catch (WebSocketException wex)
+        {
+            OnError?.Invoke($"WebSocketException: {wex.Message}");
+        }
+        catch (Exception ex)
+        {
+            OnError?.Invoke($"Exception: {ex.Message}");
+        }
+    }
+
+    public async void SendBytes(byte[] data)
+    {
+        if (!isConnected || webSocket == null || webSocket.State != WebSocketState.Open || data == null || data.Length == 0)
+            return;
+
+        try
+        {
+            await webSocket.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationTokenSource.Token);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+        {
+            // Bỏ qua các exception do huỷ task/kết nối, tránh log lỗi không cần thiết
+        }
         catch (WebSocketException wex)
         {
             OnError?.Invoke($"WebSocketException: {wex.Message}");
@@ -128,6 +155,11 @@ public class WebSocketClient
                     OnDisconnected?.Invoke();
                     break;
                 }
+            }
+            catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+            {
+                // Bỏ qua các exception do huỷ task/kết nối, vòng lặp sẽ thoát khi isConnected/webSocket.State thay đổi
+                break;
             }
             catch (WebSocketException wex)
             {

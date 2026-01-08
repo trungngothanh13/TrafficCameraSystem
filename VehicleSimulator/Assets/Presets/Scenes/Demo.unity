@@ -2832,6 +2832,8 @@ MonoBehaviour:
   maxSteeringAngle: 30
   motorForce: 50
   brakeForce: 0
+  moveAction: {fileID: 1053987998}
+  brakeAction: {fileID: 936538248}
 --- !u!4 &664757871 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 2806714669947893885, guid: 8a8f57edf3523624eb9f886833e8e97a, type: 3}
@@ -3748,6 +3750,20 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: efe06c0608269fb45a852b9c1aff7526, type: 3}
+--- !u!114 &936538248
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Driving/Brake
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: ee9776e9cbf6382479061e71f4d9bc94, type: 3}
+  m_ActionId: f3fd0376-720a-44e8-be63-66cbe6a3530a
 --- !u!1001 &1026612672
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -3992,6 +4008,20 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: f3e46b4b7b1590a4c87983b3645c9a49, type: 3}
+--- !u!114 &1053987998
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fc1515ab76e54f068e2f2207940fab32, type: 3}
+  m_Name: Driving/Move
+  m_EditorClassIdentifier: Unity.InputSystem::UnityEngine.InputSystem.InputActionReference
+  m_Asset: {fileID: -944628639613478452, guid: ee9776e9cbf6382479061e71f4d9bc94, type: 3}
+  m_ActionId: e666e4ac-d197-45cb-af92-fd4505970fb2
 --- !u!1001 &1066716176
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -5246,7 +5276,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1355887343}
-  - component: {fileID: 1355887342}
   m_Layer: 0
   m_Name: TrafficCameraSystem
   m_TagString: Untagged
@@ -5254,18 +5283,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1355887342
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1355887341}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: d34919a65bcd50a448cf3eb62c6e8d6b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::TrafficCameraSystem
 --- !u!4 &1355887343
 Transform:
   m_ObjectHideFlags: 0
@@ -6446,6 +6463,7 @@ MonoBehaviour:
   height: 1080
   quality: 80
   frameRate: 30
+  enableDebugLogs: 0
 --- !u!1001 &1650214354
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -7476,14 +7494,14 @@ Light:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1947632070}
   m_Enabled: 1
-  serializedVersion: 11
+  serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 0.95686275, b: 0.8392157, a: 1}
   m_Intensity: 1
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
-  m_CookieSize: 10
+  m_CookieSize2D: {x: 10, y: 10}
   m_Shadows:
     m_Type: 2
     m_Resolution: -1

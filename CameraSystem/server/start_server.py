@@ -8,6 +8,7 @@ import sys
 import subprocess
 import os
 from pathlib import Path
+import argparse
 
 def check_python_version():
     """Check if Python version is compatible"""
@@ -17,11 +18,19 @@ def check_python_version():
         return False
     return True
 
-def install_requirements():
-    """Install required packages"""
+def install_requirements(skip_install: bool):
+    """Install required packages (can be skipped with flag)"""
+    if skip_install:
+        print("⏩ Skip installing requirements (requested)")
+        return True
+
     try:
         print("Installing required packages...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
         print("✅ Packages installed successfully!")
         return True
     except subprocess.CalledProcessError as e:
@@ -44,6 +53,10 @@ def start_server():
 
 def main():
     """Main function"""
+    parser = argparse.ArgumentParser(description="Traffic Camera System - Python Server")
+    parser.add_argument("--skip-install", action="store_true", help="Skip pip install -r requirements.txt")
+    args = parser.parse_args()
+
     print("🚦 Traffic Camera System - Python Server")
     print("=" * 50)
     
@@ -56,7 +69,7 @@ def main():
     os.chdir(script_dir)
     
     # Install requirements
-    if not install_requirements():
+    if not install_requirements(args.skip_install):
         sys.exit(1)
     
     print()

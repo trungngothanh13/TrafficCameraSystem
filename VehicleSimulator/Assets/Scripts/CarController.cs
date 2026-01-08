@@ -1,6 +1,5 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class CarController : MonoBehaviour
 {
@@ -22,20 +21,51 @@ public class CarController : MonoBehaviour
     public float motorForce = 50f;
     public float brakeForce = 0f;
 
+    [Header("Input System (New)")]
+    [Tooltip("Input Action (Vector2) cho chuyển động: X = ngang, Y = dọc")]
+    public InputActionReference moveAction;
+
+    [Tooltip("Input Action (Button/Axis) cho phanh")]
+    public InputActionReference brakeAction;
+
+    private void OnEnable()
+    {
+        if (moveAction != null)
+            moveAction.action.Enable();
+        if (brakeAction != null)
+            brakeAction.action.Enable();
+    }
+
+    private void OnDisable()
+    {
+        if (moveAction != null)
+            moveAction.action.Disable();
+        if (brakeAction != null)
+            brakeAction.action.Disable();
+    }
 
     private void FixedUpdate()
     {
-        GetInput();
+        ReadInput();
         HandleMotor();
         HandleSteering();
         UpdateWheels();
     }
 
-    private void GetInput()
+    private void ReadInput()
     {
-        horizontalInput = Input.GetAxis("Horizontal");
-        verticalInput = Input.GetAxis("Vertical");
-        isBreaking = Input.GetKey(KeyCode.Space);
+        // Đọc từ Input System mới
+        Vector2 move = Vector2.zero;
+        if (moveAction != null)
+            move = moveAction.action.ReadValue<Vector2>();
+
+        float brakeValue = 0f;
+        if (brakeAction != null)
+            brakeValue = brakeAction.action.ReadValue<float>();
+
+        horizontalInput = move.x;
+        verticalInput = move.y;
+        isBreaking = brakeValue > 0.5f;
     }
 
     private void HandleSteering()

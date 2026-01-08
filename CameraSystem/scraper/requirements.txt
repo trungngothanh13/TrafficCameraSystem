@@ -1,0 +1,2 @@
+# Requirements for Frame Scraper
+requests>=2.31.0

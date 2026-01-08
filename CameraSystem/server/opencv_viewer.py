@@ -2,6 +2,11 @@
 """
 Traffic Camera System - OpenCV Viewer
 Connects to the Python WebSocket server and displays up to 4 camera feeds in a 2x2 grid.
+
+Optimizations:
+- Frame skipping to maintain smooth playback
+- Reduced resize operations
+- Efficient grid building
 """
 
 import asyncio
@@ -11,9 +16,21 @@ import base64
 import cv2
 import numpy as np
 from datetime import datetime
+import time
 
 WS_URL = 'ws://127.0.0.1:8081'
 WINDOW_NAME = 'Traffic Camera - OpenCV Viewer'
+
+# Tunable networking
+PING_INTERVAL = 20
+PING_TIMEOUT = 10
+RECONNECT_DELAY = 2  # seconds
+MAX_FRAMES = 4  # keep only latest N frames (by camera id)
+
+# Performance tuning
+TARGET_FPS = 30  # Target display FPS
+MIN_DISPLAY_INTERVAL = 1.0 / TARGET_FPS  # Minimum time between display updates
+SKIP_FRAME_IF_BUSY = True  # Skip frame if previous display not finished
 
 class OpenCVViewer:
     def __init__(self, ws_url: str):
@@ -22,6 +39,8 @@ class OpenCVViewer:
         self.last_update = {}
         self.max_cameras = 4
         self.running = True
+        self.last_display_time = 0
+        self.display_busy = False
 
     def decode_frame(self, base64_data: str):
         try:
@@ -44,7 +63,7 @@ class OpenCVViewer:
             cv2.putText(grid, 'Waiting for streams...', (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255,255,255), 2)
             return grid
 
-        # 2x2 grid layout
+        # 2x2 grid layout - pre-calculate positions
         cell_w = canvas_w // 2
         cell_h = canvas_h // 2
         positions = [(0,0), (0,cell_w), (cell_h,0), (cell_h,cell_w)]
@@ -52,11 +71,18 @@ class OpenCVViewer:
         for idx, (cam_id, frame) in enumerate(items):
             if frame is None:
                 continue
+            
+            # Cache scale calculation if frame size hasn't changed
             h, w = frame.shape[:2]
             scale = min(cell_w / w, cell_h / h)
             new_w = int(w * scale)
             new_h = int(h * scale)
-            resized = cv2.resize(frame, (new_w, new_h))
+            
+            # Only resize if needed (optimization)
+            if new_w != w or new_h != h:
+                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+            else:
+                resized = frame
 
             y, x = positions[idx]
             y_off = y + (cell_h - new_h) // 2
@@ -70,10 +96,13 @@ class OpenCVViewer:
 
         return grid
 
-    async def run(self):
-        print(f'Connecting to {self.ws_url} ...')
-        async with websockets.connect(self.ws_url, ping_interval=20, ping_timeout=10, compression=None) as ws:
-            print('Connected.')
+    async def run_once(self):
+        async with websockets.connect(
+            self.ws_url,
+            ping_interval=PING_INTERVAL,
+            ping_timeout=PING_TIMEOUT,
+            compression=None
+        ) as ws:
             cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(WINDOW_NAME, 1280, 720)
 
@@ -89,18 +118,50 @@ class OpenCVViewer:
                     ts = data.get('timestamp', datetime.now().isoformat())
                     frame = self.decode_frame(img_b64)
                     if frame is not None:
+                        # keep only latest per camera, truncate dictionary size
                         self.frames[cam_id] = frame
                         self.last_update[cam_id] = ts
+                        if len(self.frames) > MAX_FRAMES:
+                            # drop oldest by camera id ordering
+                            oldest = sorted(self.frames.keys())[0]
+                            if oldest != cam_id:
+                                self.frames.pop(oldest, None)
+                                self.last_update.pop(oldest, None)
 
-                    grid = self.build_grid()
-                    cv2.imshow(WINDOW_NAME, grid)
+                    # Frame rate limiting: only display if enough time has passed
+                    current_time = time.time()
+                    time_since_last_display = current_time - self.last_display_time
+                    
+                    if time_since_last_display >= MIN_DISPLAY_INTERVAL:
+                        if not (SKIP_FRAME_IF_BUSY and self.display_busy):
+                            self.display_busy = True
+                            grid = self.build_grid()
+                            cv2.imshow(WINDOW_NAME, grid)
+                            self.last_display_time = current_time
+                            self.display_busy = False
 
                     key = cv2.waitKey(1) & 0xFF
                     if key == 27:  # ESC
                         print('Exiting...')
+                        self.running = False
                         break
 
         cv2.destroyAllWindows()
+
+    async def run(self):
+        print(f'Connecting to {self.ws_url} ...')
+        while self.running:
+            try:
+                await self.run_once()
+            except (websockets.exceptions.ConnectionClosedError, websockets.exceptions.InvalidStatusCode) as e:
+                print(f'WebSocket error: {e}. Reconnecting in {RECONNECT_DELAY}s...')
+                await asyncio.sleep(RECONNECT_DELAY)
+            except Exception as e:
+                print(f'Error: {e}. Reconnecting in {RECONNECT_DELAY}s...')
+                await asyncio.sleep(RECONNECT_DELAY)
+            else:
+                # run_once exited normally (ESC), stop loop
+                break
 
 
 def main():
