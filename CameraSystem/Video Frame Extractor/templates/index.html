@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Video Frame Extractor — Antigravity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --surface: #111318;
+      --surface2: #181c25;
+      --border: #1e2333;
+      --border2: #252c3d;
+      --accent: #6c63ff;
+      --accent2: #8b84ff;
+      --accent-glow: rgba(108,99,255,0.25);
+      --green: #22d97a;
+      --green-glow: rgba(34,217,122,0.2);
+      --red: #ff4f6a;
+      --yellow: #f0b429;
+      --blue: #38bdf8;
+      --text: #e8eaf0;
+      --text2: #9aa3b8;
+      --text3: #5a6177;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 800px 600px at 10% 20%, rgba(108,99,255,0.06) 0%, transparent 70%),
+        radial-gradient(ellipse 600px 400px at 90% 80%, rgba(34,217,122,0.04) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 48px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      box-shadow: 0 0 24px var(--accent-glow);
+    }
+
+    .logo-text h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      background: linear-gradient(135deg, #e8eaf0, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo-text p {
+      font-size: 12px;
+      color: var(--text3);
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      font-family: 'Inter', sans-serif;
+      letter-spacing: 0.1px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      color: white;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 28px rgba(108,99,255,0.4);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--border2);
+    }
+
+    .btn-outline:hover:not(:disabled) {
+      background: var(--surface2);
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
+    .btn-danger {
+      background: rgba(255,79,106,0.12);
+      color: var(--red);
+      border: 1px solid rgba(255,79,106,0.25);
+    }
+
+    .btn-danger:hover:not(:disabled) {
+      background: rgba(255,79,106,0.2);
+    }
+
+    .btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* Summary stats */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .stat-card:hover { border-color: var(--border2); }
+
+    .stat-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .stat-icon.purple { background: rgba(108,99,255,0.15); }
+    .stat-icon.green  { background: rgba(34,217,122,0.12); }
+    .stat-icon.blue   { background: rgba(56,189,248,0.12); }
+    .stat-icon.yellow { background: rgba(240,180,41,0.12); }
+
+    .stat-info label {
+      font-size: 11px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      font-weight: 500;
+    }
+
+    .stat-info .stat-val {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      margin-top: 2px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Video cards */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .video-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .video-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), #a78bfa);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .video-card.running::before { opacity: 1; }
+    .video-card.running {
+      border-color: rgba(108,99,255,0.35);
+      box-shadow: 0 0 30px rgba(108,99,255,0.1);
+    }
+
+    .video-card.done::before {
+      background: linear-gradient(90deg, var(--green), #34d399);
+      opacity: 1;
+    }
+    .video-card.done { border-color: rgba(34,217,122,0.3); }
+
+    .video-card.error::before {
+      background: var(--red);
+      opacity: 1;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 18px;
+    }
+
+    .video-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .video-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .video-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .video-meta {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Status badge */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+
+    .badge-idle    { background: rgba(90,97,119,0.2);   color: var(--text3); }
+    .badge-running { background: rgba(108,99,255,0.15); color: var(--accent2); }
+    .badge-done    { background: rgba(34,217,122,0.12); color: var(--green); }
+    .badge-error   { background: rgba(255,79,106,0.12); color: var(--red); }
+    .badge-cancelled { background: rgba(240,180,41,0.12); color: var(--yellow); }
+
+    .badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge-running .dot {
+      animation: pulse-dot 1.2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Specs grid */
+    .specs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .spec-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .spec-label {
+      font-size: 10px;
+      color: var(--text3);
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      font-weight: 500;
+    }
+
+    .spec-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-top: 3px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Progress */
+    .progress-section { margin-bottom: 18px; }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .progress-label {
+      font-size: 12px;
+      color: var(--text2);
+      font-weight: 500;
+    }
+
+    .progress-pct {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent2);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .progress-bar-bg {
+      height: 6px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent), #a78bfa);
+      transition: width 0.4s ease;
+      position: relative;
+    }
+
+    .progress-bar-fill.done-fill {
+      background: linear-gradient(90deg, var(--green), #34d399);
+    }
+
+    .progress-bar-fill.running-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 40px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    @keyframes shimmer {
+      0% { transform: translateX(-40px); opacity: 0; }
+      50% { opacity: 1; }
+      100% { transform: translateX(40px); opacity: 0; }
+    }
+
+    .progress-sub {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Message */
+    .card-message {
+      font-size: 12px;
+      color: var(--text3);
+      min-height: 18px;
+      margin-bottom: 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Card actions */
+    .card-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .card-actions .btn { flex: 1; justify-content: center; padding: 8px 12px; font-size: 12px; }
+
+    /* Section label */
+    .section-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text3);
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .toast {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--text);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+      animation: slideIn 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* Loading skeleton */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: skeleton-load 1.5s infinite;
+      border-radius: 6px;
+    }
+
+    @keyframes skeleton-load {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    @media (max-width: 768px) {
+      .cards-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container">
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">🎞️</div>
+      <div class="logo-text">
+        <h1>Video Frame Extractor</h1>
+        <p>by Antigravity · 4K60fps → Training Data</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-outline" onclick="loadVideos()" id="refreshBtn">
+        🔄 Refresh
+      </button>
+      <button class="btn btn-primary" onclick="extractAll()" id="extractAllBtn">
+        ⚡ Extract All
+      </button>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card">
+      <div class="stat-icon purple">🎬</div>
+      <div class="stat-info">
+        <label>Total Videos</label>
+        <div class="stat-val" id="statVideos">4</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon green">🖼️</div>
+      <div class="stat-info">
+        <label>Frames Extracted</label>
+        <div class="stat-val" id="statFrames">—</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon blue">⏱️</div>
+      <div class="stat-info">
+        <label>Total Duration</label>
+        <div class="stat-val" id="statDuration">—</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon yellow">💾</div>
+      <div class="stat-info">
+        <label>Total Size</label>
+        <div class="stat-val" id="statSize">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cards -->
+  <div class="section-label">Video Sources</div>
+  <div class="cards-grid" id="cardsGrid">
+    <!-- filled by JS -->
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let videosData = [];
+
+  // Socket.IO real-time updates
+  socket.on('status_update', (data) => {
+    updateCard(data);
+    updateStats();
+  });
+
+  socket.on('connect', () => console.log('🔌 Connected to server'));
+
+  function showToast(msg, icon = '✅') {
+    const c = document.getElementById('toastContainer');
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = `<span>${icon}</span><span>${msg}</span>`;
+    c.appendChild(t);
+    setTimeout(() => c.removeChild(t), 3500);
+  }
+
+  function formatDuration(sec) {
+    if (!sec) return '—';
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  }
+
+  function formatRes(w, h) {
+    if (!w || !h) return '—';
+    if (w >= 3840) return '4K UHD';
+    if (w >= 2560) return '2K QHD';
+    if (w >= 1920) return '1080p';
+    return `${w}×${h}`;
+  }
+
+  function getBadgeHtml(status) {
+    const map = {
+      idle:      ['⬜', 'badge-idle',      'Idle'],
+      running:   ['',   'badge-running',   'Extracting'],
+      done:      ['',   'badge-done',      'Done'],
+      error:     ['',   'badge-error',     'Error'],
+      cancelled: ['',   'badge-cancelled', 'Cancelled'],
+    };
+    const [icon, cls, label] = map[status] || map.idle;
+    const dot = (status === 'running') ? `<span class="dot"></span>` : '';
+    return `<span class="badge ${cls}">${dot}${label}</span>`;
+  }
+
+  function renderCard(v) {
+    const id = v.id;
+    const progress = v.progress || 0;
+    const isFillDone = v.status === 'done';
+    const isRunning = v.status === 'running';
+    const fillClass = isFillDone ? 'done-fill' : (isRunning ? 'running-fill' : '');
+
+    return `
+    <div class="video-card ${v.status || 'idle'}" id="card-${id}">
+      <div class="card-header">
+        <div class="video-title">
+          <div class="video-num">${id}</div>
+          <div>
+            <div class="video-name">${v.file}</div>
+            <div class="video-meta">${v.size_mb} MB</div>
+          </div>
+        </div>
+        <div id="badge-${id}">${getBadgeHtml(v.status || 'idle')}</div>
+      </div>
+
+      <div class="specs">
+        <div class="spec-item">
+          <div class="spec-label">Resolution</div>
+          <div class="spec-val">${formatRes(v.width, v.height)}</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Frame Rate</div>
+          <div class="spec-val">${v.fps ? v.fps + ' fps' : '—'}</div>
+        </div>
+        <div class="spec-item">
+          <div class="spec-label">Duration</div>
+          <div class="spec-val">${formatDuration(v.duration)}</div>
+        </div>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-info">
+          <span class="progress-label">Progress</span>
+          <span class="progress-pct" id="pct-${id}">${progress}%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill ${fillClass}" id="fill-${id}" style="width:${progress}%"></div>
+        </div>
+        <div class="progress-sub">
+          <span id="frames-${id}">${v.current_frame || v.existing_frames || 0} / ${v.total_frames || '?'} frames</span>
+          <span id="msg-extra-${id}"></span>
+        </div>
+      </div>
+
+      <div class="card-message" id="msg-${id}">${v.message || 'Ready to extract'}</div>
+
+      <div class="card-actions">
+        <button class="btn btn-primary" id="startBtn-${id}" onclick="startExtraction(${id})"
+          ${isRunning ? 'disabled' : ''}>
+          ${isRunning ? '⏳ Running...' : '▶ Extract'}
+        </button>
+        <button class="btn btn-danger" id="cancelBtn-${id}" onclick="cancelExtraction(${id})"
+          ${!isRunning ? 'disabled' : ''}>
+          ✕ Cancel
+        </button>
+        <button class="btn btn-outline" onclick="openFolder(${id})">
+          📁 Open
+        </button>
+      </div>
+    </div>`;
+  }
+
+  function updateCard(data) {
+    const id = data.video_id;
+    const card = document.getElementById(`card-${id}`);
+    if (!card) return;
+
+    const progress = data.progress || 0;
+    const status = data.status || 'idle';
+    const isRunning = status === 'running';
+    const isDone = status === 'done';
+
+    // Update card class
+    card.className = `video-card ${status}`;
+
+    // Badge
+    document.getElementById(`badge-${id}`).innerHTML = getBadgeHtml(status);
+
+    // Progress
+    document.getElementById(`pct-${id}`).textContent = `${progress}%`;
+    const fill = document.getElementById(`fill-${id}`);
+    fill.style.width = `${progress}%`;
+    fill.className = `progress-bar-fill ${isDone ? 'done-fill' : (isRunning ? 'running-fill' : '')}`;
+
+    // Frames label
+    document.getElementById(`frames-${id}`).textContent =
+      `${data.current_frame || 0} / ${data.total_frames || '?'} frames`;
+
+    // Message
+    document.getElementById(`msg-${id}`).textContent = data.message || '';
+
+    // Buttons
+    document.getElementById(`startBtn-${id}`).disabled = isRunning;
+    document.getElementById(`startBtn-${id}`).innerHTML = isRunning ? '⏳ Running...' : '▶ Extract';
+    document.getElementById(`cancelBtn-${id}`).disabled = !isRunning;
+
+    // Update local data
+    const v = videosData.find(v => v.id === id);
+    if (v) Object.assign(v, data);
+  }
+
+  function updateStats() {
+    const totalFrames = videosData.reduce((a, v) => {
+      const cur = v.current_frame || v.existing_frames || 0;
+      return a + cur;
+    }, 0);
+    const totalDur = videosData.reduce((a, v) => a + (v.duration || 0), 0);
+    const totalSize = videosData.reduce((a, v) => a + (v.size_mb || 0), 0);
+    document.getElementById('statFrames').textContent = totalFrames.toLocaleString();
+    document.getElementById('statDuration').textContent = formatDuration(totalDur);
+    document.getElementById('statSize').textContent = totalSize > 1024
+      ? (totalSize / 1024).toFixed(1) + ' GB'
+      : totalSize.toFixed(0) + ' MB';
+  }
+
+  async function loadVideos() {
+    const grid = document.getElementById('cardsGrid');
+    grid.innerHTML = `
+      ${[1,2,3,4].map(() => `
+        <div class="video-card" style="opacity:0.5">
+          <div class="skeleton" style="height:20px;width:60%;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:60px;margin-bottom:12px"></div>
+          <div class="skeleton" style="height:8px;margin-bottom:12px"></div>
+        </div>
+      `).join('')}
+    `;
+    try {
+      const res = await fetch('/api/videos');
+      videosData = await res.json();
+      grid.innerHTML = videosData.map(renderCard).join('');
+      updateStats();
+    } catch (e) {
+      grid.innerHTML = `<div style="color:var(--red);padding:20px">Failed to load video info.</div>`;
+    }
+  }
+
+  async function startExtraction(id) {
+    const btn = document.getElementById(`startBtn-${id}`);
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
+    try {
+      await fetch(`/api/extract/${id}`, { method: 'POST' });
+      showToast(`Started extraction for Data_${id}.mp4`, '⚡');
+    } catch (e) {
+      showToast('Failed to start extraction', '❌');
+      btn.disabled = false;
+    }
+  }
+
+  async function extractAll() {
+    const btn = document.getElementById('extractAllBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Starting all...';
+    try {
+      await fetch('/api/extract/all', { method: 'POST' });
+      showToast('All 4 videos queued for extraction!', '🚀');
+    } catch (e) {
+      showToast('Failed to start extraction', '❌');
+    }
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = '⚡ Extract All';
+    }, 3000);
+  }
+
+  async function cancelExtraction(id) {
+    await fetch(`/api/cancel/${id}`, { method: 'POST' });
+    showToast(`Cancelled Data_${id}.mp4`, '🛑');
+  }
+
+  function openFolder(id) {
+    showToast(`Frames saved in Data_${id}_frame/`, '📁');
+  }
+
+  // Initial load
+  loadVideos();
+</script>
+</body>
+</html>
